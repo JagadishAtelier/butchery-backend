@@ -52,7 +52,7 @@ exports.updateCategory = async (req, res) => {
     const updated = await Category.findByIdAndUpdate(
       req.params.id,
       req.body,
-      { new: true, runValidators: true }
+      { new: true}
     );
     if (!updated) return res.status(404).json({ message: "Category not found" });
     res.json({ message: "Category updated", updated });

@@ -1,6 +1,7 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const productRoutes = require("./Router/productRoutes");
+const pincodeRoutes = require("./Router/pincodeRoutes");
 const orderRoutes = require("./Router/orderRoutes");
 const analyticsRoutes = require("./Router/analyticsRoutes");
 const campaignRoutes = require("./Router/campaignRoutes");
@@ -26,6 +27,7 @@ app.use("/api/analytics", shippingAnalyticsRoutes);
 app.use("/api/shiprocket", shiprocketRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/analytics", analyticsRoutes);
+app.use("/api/pincodes", pincodeRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/campaigns", campaignRoutes);
 
