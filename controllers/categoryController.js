@@ -3,7 +3,7 @@ const Category = require("../Model/categoryModel");
 // ✅ Create category
 exports.createCategory = async (req, res) => {
   try {
-    const { name, description, image, subcategories } = req.body;
+    const { name, description, image, tamilName,tamilDescription } = req.body;
 
     // Check if category already exists
     const existing = await Category.findOne({ name });
@@ -14,8 +14,9 @@ exports.createCategory = async (req, res) => {
     const category = new Category({
       name,
       description,
+      tamilName,
+      tamilDescription,
       image,
-      subcategories: subcategories || [],
     });
 
     await category.save();

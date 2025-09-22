@@ -3,7 +3,6 @@ const jwt = require('jsonwebtoken');
 const User = require('../Model/User');
 const sendEmail = require('../utils/sendEmail');
 const protect = require('../middleware/auth')
-
 const JWT_SECRET = process.env.JWT_SECRET || 'your_secret_key';
 
 exports.register = async function (req, res) {
@@ -150,5 +149,24 @@ exports.changePassword = async (req, res) => {
     res.json({ message: 'Password changed successfully' });
   } catch (err) {
     res.status(500).json({ message: 'Failed to change password', error: err.message });
+  }
+};
+
+exports.getUserById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const user = await User.findById(id)
+      .select("-password -otp -otpExpires") // hide sensitive fields
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json({ success: true, user });
+  } catch (err) {
+    res.status(500).json({
+      message: "Failed to fetch user",
+      error: err.message,
+    });
   }
 };

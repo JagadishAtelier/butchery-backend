@@ -9,6 +9,7 @@ const shiprocketRoutes = require("./Router/shiprocketRoutes");
 const authRoutes = require("./Router/authRoutes")
 const categoryRoutes = require("./Router/categoryRoutes");
 const shippingAnalyticsRoutes = require("./Router/shippingAnalyticsRoutes");
+const cartRoutes = require('./Router/cartRoutes')
 const cors = require("cors")
 const app = express();
 require("dotenv").config();
@@ -30,5 +31,6 @@ app.use("/api/analytics", analyticsRoutes);
 app.use("/api/pincodes", pincodeRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/campaigns", campaignRoutes);
+app.use("/api/cart", cartRoutes);
 
 module.exports = app;

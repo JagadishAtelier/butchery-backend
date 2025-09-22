@@ -5,11 +5,13 @@ const productSchema = new mongoose.Schema(
     productId: { type: String, required: true, unique: true },
     images: [{ type: String }], // Product images
     name: { type: String, required: true }, // e.g., Chicken Breast, Mutton Curry Cut
+    tamilName : { type : String , required :true},
     category: { type: mongoose.Schema.Types.ObjectId, ref: "Category", required: true },
     
     productVideoUrl: { type: String },
 
     description: { type: String }, // Product details
+    tamilDescription : {type : String},
 
     // ✅ Meat-specific attributes
     cutType: [{ type: String }], // e.g., "Curry Cut", "Boneless", "Whole"
@@ -22,6 +24,7 @@ const productSchema = new mongoose.Schema(
       {
         weight: { type: Number, required: true }, // e.g., 500, 1000 (grams)
         price: { type: Number, required: true }, // price for this weight
+        discountPrice : {type : Number},
         stock: { type: Number, default: 0 }, // stock for this weight option
       },
     ],

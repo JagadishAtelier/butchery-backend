@@ -18,7 +18,6 @@ const userSchema = new mongoose.Schema(
       enum: ["admin", "customer", "delivery"],
       default: "customer",
     },
-
     // ✅ Customer profile info
     phone: { type: String },
     gender: { type: String, enum: ["Male", "Female", "Other"] },
@@ -36,21 +35,6 @@ const userSchema = new mongoose.Schema(
         isDefault: { type: Boolean, default: false },
       },
     ],
-
-    // ✅ Cart
-    cart: [
-      {
-        productId: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
-        weight: { type: Number }, // 500, 1000
-        unit: { type: String }, // g, kg, piece
-        price: { type: Number }, // at the time of adding
-        quantity: { type: Number, default: 1 },
-      },
-    ],
-
-    // ✅ Wishlist
-    wishlist: [{ type: mongoose.Schema.Types.ObjectId, ref: "Product" }],
-
     // ✅ OTP Verification
     otp: { type: String },
     otpExpires: { type: Date },

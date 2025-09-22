@@ -36,11 +36,14 @@ exports.getOrders = async (req, res) => {
 // 📌 Get a single order by ID
 exports.getOrderById = async (req, res) => {
   try {
-    const order = await Order.findOne(req.params.id)
+    // Use findById instead of findOne
+    const order = await Order.findById(req.params.id)
       .populate("buyer", "name email")
       .populate("products.productId", "name price");
+
     if (!order)
       return res.status(404).json({ success: false, message: "Order not found" });
+
     res.json({ success: true, data: order });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -73,9 +76,12 @@ exports.updateOrder = async (req, res) => {
 // 📌 Delete an order by ID
 exports.deleteOrder = async (req, res) => {
   try {
-    const order = await Order.findOneAndDelete(req.params.id);
+    // Use findByIdAndDelete instead of findOneAndDelete
+    const order = await Order.findByIdAndDelete(req.params.id);
+
     if (!order)
       return res.status(404).json({ success: false, message: "Order not found" });
+
     res.json({ success: true, message: "Order deleted successfully" });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
