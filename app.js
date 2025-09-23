@@ -1,5 +1,6 @@
 const express = require("express");
 const mongoose = require("mongoose");
+const morgan = require("morgan");
 const productRoutes = require("./Router/productRoutes");
 const orderRoutes = require("./Router/orderRoutes");
 const analyticsRoutes = require("./Router/analyticsRoutes");
@@ -20,6 +21,7 @@ app.use(cors({
   origin: "*",  // allows requests from any domain
   credentials: true, // optional: only needed if you use cookies or auth headers
 }));
+app.use(morgan('dev'));
 // Routes
 app.use("/api/categories", categoryRoutes);
 

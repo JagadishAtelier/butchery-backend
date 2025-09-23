@@ -50,6 +50,19 @@ exports.getOrderById = async (req, res) => {
   }
 };
 
+exports.getOrderbyuserId = async (req, res) => {
+  try {
+    const orders = await Order.find({ buyer: req.params.userId })
+      .populate("buyer", "name email") // fetch buyer name & email
+      .populate("products.productId", "name price image") // ✅ include image field
+      .sort({ createdAt: -1 });
+
+    res.json({ success: true, data: orders });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
 // 📌 Update an order by ID
 exports.updateOrder = async (req, res) => {
   try {
