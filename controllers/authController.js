@@ -76,9 +76,9 @@ exports.forgotPassword = async (req, res) => {
   const user = await User.findOne({ email });
   if (!user) return res.status(404).json({ message: 'User not found' });
 
-  const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit OTP
+  const otp = Math.floor(100000 + Math.random() * 900000).toString(); 
   user.otp = otp;
-  user.otpExpires = Date.now() + 10 * 60 * 1000; // 10 mins
+  user.otpExpires = Date.now() + 10 * 60 * 1000; 
   await user.save();
 
  const subject = 'Your Password Reset OTP';
