@@ -1,5 +1,6 @@
 const express = require("express");
 const mongoose = require("mongoose");
+const morgan = require("morgan");
 const productRoutes = require("./Router/productRoutes");
 const pincodeRoutes = require("./Router/pincodeRoutes");
 const orderRoutes = require("./Router/orderRoutes");
@@ -15,11 +16,13 @@ const app = express();
 require("dotenv").config();
 
 // Middleware
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ limit: "10mb", extended: true }));
 app.use(cors({
   origin: "*",  // allows requests from any domain
   credentials: true, // optional: only needed if you use cookies or auth headers
 }));
+app.use(morgan('dev'));
 // Routes
 app.use("/api/categories", categoryRoutes);
 

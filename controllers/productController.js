@@ -43,6 +43,17 @@ exports.getProductById = async (req, res) => {
   }
 };
 
+exports.getProductsByCategory = async (req, res) => {
+  try {
+    const { category } = req.params;
+    const products = await Product.find({ category });
+    res.json({ success: true, data: products });
+  }
+  catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // 📌 Update Product
 // 📌 Update Product
 exports.updateProduct = async (req, res) => {

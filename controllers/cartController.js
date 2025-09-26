@@ -3,37 +3,120 @@ const User = require("../Model/User");
 const Product = require("../Model/ProductModel");
 // Add item to cart
 exports.addToCart = async (req, res) => {
-    try {
-      const { productId, quantity } = req.body;
-      const userId = req.user._id;
-  
-      const product = await Product.findById(productId);
-      console.log("products id :",product)
-      if (!product) return res.status(404).json({ message: "Product not found" });
-  
-      let cart = await Cart.findOne({ user: userId });
-  
-      if (!cart) {
-        cart = new Cart({
-          user: userId,
-          items: [{ product: productId, quantity, price }],
-        });
+  try {
+    const { productId, quantity = 1, price, weightOptionId } = req.body;
+    const userId = req.user._id;
+
+    console.log("[addToCart] body:", { productId, quantity, price, weightOptionId, userId });
+
+    // fetch product
+    const product = await Product.findById(productId).lean();
+    if (!product) return res.status(404).json({ success: false, message: "Product not found" });
+
+    // resolve chosen weight option
+    let chosenOption = null;
+    if (Array.isArray(product.weightOptions) && product.weightOptions.length > 0) {
+      if (weightOptionId) {
+        chosenOption = product.weightOptions.find(o => o._id && o._id.toString() === weightOptionId.toString());
+      }
+      if (!chosenOption) chosenOption = product.weightOptions[0]; // fallback
+    }
+
+    // determine final price
+    let finalPrice = price;
+    if (finalPrice === undefined || finalPrice === null) {
+      if (chosenOption && chosenOption.price != null) finalPrice = chosenOption.price;
+      else if (product.weightOptions && product.weightOptions.length > 0) finalPrice = product.weightOptions[0].price;
+    }
+    if (finalPrice === undefined || finalPrice === null) {
+      return res.status(400).json({ success: false, message: "Price not available for this product" });
+    }
+    finalPrice = Number(finalPrice);
+    if (Number.isNaN(finalPrice)) return res.status(400).json({ success: false, message: "Invalid price value" });
+
+    // build chosen metadata
+    const chosenWeightOptionId = chosenOption?._id || null;
+    const chosenWeight = chosenOption?.weight ?? null;
+    const chosenDiscount = chosenOption?.discountPrice ?? null;
+
+    // find or create cart
+    let cart = await Cart.findOne({ user: userId });
+    const qtyToAdd = Number(quantity) || 1;
+
+    if (!cart) {
+      cart = new Cart({
+        user: userId,
+        items: [{
+          product: productId,
+          quantity: qtyToAdd,
+          price: finalPrice,
+          weightOption: chosenWeightOptionId,
+          weight: chosenWeight,
+          discountPrice: chosenDiscount,
+        }],
+      });
+    } else {
+      // Update existing item if product + weightOption matches
+      const itemIndex = cart.items.findIndex(item => {
+        const itemProduct = item.product?.toString();
+        const itemWeightOpt = item.weightOption ? item.weightOption.toString() : "";
+        const matchWeightOpt = String(itemWeightOpt || "") === String(chosenWeightOptionId || "");
+        return itemProduct === productId.toString() && matchWeightOpt;
+      });
+
+      if (itemIndex > -1) {
+        cart.items[itemIndex].quantity = (cart.items[itemIndex].quantity || 0) + qtyToAdd;
+        // keep the stored price as-is (snapshot), or update it if you prefer:
+        // cart.items[itemIndex].price = finalPrice;
       } else {
-        const itemIndex = cart.items.findIndex(item => item.product.toString() === productId);
-        if (itemIndex > -1) {
-          cart.items[itemIndex].quantity += quantity;
+        // push as a new line (different weightOption)
+        cart.items.push({
+          product: productId,
+          quantity: qtyToAdd,
+          price: finalPrice,
+          weightOption: chosenWeightOptionId,
+          weight: chosenWeight,
+          discountPrice: chosenDiscount,
+        });
+      }
+
+      // DEDUPE existing duplicates for same product + weightOption (safety)
+      // Build map key = `${productId}_${weightOptionId||''}`
+      const map = new Map();
+      for (const it of cart.items) {
+        const pid = it.product?.toString();
+        const wopt = it.weightOption ? it.weightOption.toString() : "";
+        const key = `${pid}_${wopt}`;
+        if (!map.has(key)) {
+          map.set(key, {
+            product: it.product,
+            quantity: it.quantity || 0,
+            price: it.price,
+            weightOption: it.weightOption || null,
+            weight: it.weight || null,
+            discountPrice: it.discountPrice || null,
+            _id: it._id, // will keep first id (mongoose will handle _id)
+          });
         } else {
-          cart.items.push({ product: productId, quantity, price: product.price });
+          // merge quantities (and keep first price/metadata)
+          const existing = map.get(key);
+          existing.quantity = (existing.quantity || 0) + (it.quantity || 0);
+          map.set(key, existing);
         }
       }
-  
-      await cart.save();
-      res.status(200).json({ success: true, data: cart });
-    } catch (error) {
-      res.status(500).json({ success: false, message: error.message });
+
+      // replace cart.items with deduped items array
+      cart.items = Array.from(map.values());
     }
-  };
-  
+
+    const saved = await cart.save();
+    return res.status(200).json({ success: true, data: saved });
+  } catch (err) {
+    console.error("addToCart error:", err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
   // Get user's cart
   exports.getCart = async (req, res) => {
     try {
@@ -49,18 +132,67 @@ exports.addToCart = async (req, res) => {
   
   // Remove item from cart
   exports.removeFromCart = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { productId } = req.params; // this is cart item _id
+
+    const cart = await Cart.findOne({ user: userId });
+    if (!cart) return res.status(404).json({ message: "Cart not found" });
+
+    // Filter by cart item _id
+    cart.items = cart.items.filter(item => item._id.toString() !== productId);
+    await cart.save();
+
+    res.status(200).json({ success: true, data: cart });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+
+
+  // get card by user id
+  exports.getCartByUserId = async (req, res) => {
     try {
       const userId = req.user._id;
-      const { productId } = req.params;
-  
-      const cart = await Cart.findOne({ user: userId });
-      if (!cart) return res.status(404).json({ message: "Cart not found" });
-  
-      cart.items = cart.items.filter(item => item.product.toString() !== productId);
-      await cart.save();
-  
+      const user = await User.findById(userId);
+      if (!user) return res.status(404).json({ success: false, message: "User not found" });
+      const cart = await Cart.findOne({ user: userId }).populate("items.product", "name price images");
+      // console.log("Cart for user:", cart);
+      if (!cart) return res.status(404).json({ success: false, message: "Cart is empty" });
       res.status(200).json({ success: true, data: cart });
     } catch (error) {
       res.status(500).json({ success: false, message: error.message });
     }
   };
+
+
+  exports.updateCartItem = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { itemId } = req.params; // the _id of the cart item
+    const { quantity, price, weightOptionId, discountPrice } = req.body;
+
+    const cart = await Cart.findOne({ user: userId });
+    if (!cart) return res.status(404).json({ success: false, message: "Cart not found" });
+
+    const itemIndex = cart.items.findIndex(item => item._id.toString() === itemId);
+    if (itemIndex === -1) return res.status(404).json({ success: false, message: "Item not found in cart" });
+
+    // Update fields if provided
+    if (quantity !== undefined) cart.items[itemIndex].quantity = quantity;
+    if (price !== undefined) cart.items[itemIndex].price = price;
+    if (weightOptionId !== undefined) cart.items[itemIndex].weightOption = weightOptionId;
+    if (discountPrice !== undefined) cart.items[itemIndex].discountPrice = discountPrice;
+
+    const updatedCart = await cart.save();
+
+    // populate product info for frontend convenience
+    const populatedCart = await Cart.findById(updatedCart._id).populate("items.product", "name price images");
+
+    res.status(200).json({ success: true, data: populatedCart });
+  } catch (error) {
+    console.error("updateCartItem error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
