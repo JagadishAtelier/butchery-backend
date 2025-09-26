@@ -1,8 +1,9 @@
+// models/Order.js
 const mongoose = require("mongoose");
 
 const orderSchema = new mongoose.Schema(
   {
-    orderId: { type: String, unique: true }, // auto-generated order ID
+    orderId: { type: String, unique: true },
 
     buyer: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     location: { type: String, required: true },
@@ -38,9 +39,27 @@ const orderSchema = new mongoose.Schema(
     total: { type: Number, required: true },
     discount: { type: Number, default: 0 },
     finalAmount: { type: Number, required: true },
+
+    // --- Ping location (GeoJSON Point) + timestamp
+    // NOTE: GeoJSON coordinate order is [longitude, latitude]
+    pingLocation: {
+      type: {
+        type: String,
+        enum: ["Point"],
+        default: "Point",
+      },
+      coordinates: {
+        type: [Number], // [lng, lat]
+        default: undefined, // keep undefined unless provided
+      },
+    },
+    pingedAt: { type: Date }, // when the ping was recorded
   },
   { timestamps: true }
 );
+
+// create 2dsphere index for geo queries
+orderSchema.index({ pingLocation: "2dsphere" });
 
 // 🔹 Auto-generate incremental orderId before saving
 orderSchema.pre("save", async function (next) {
@@ -65,6 +84,5 @@ orderSchema.pre("save", async function (next) {
     next();
   }
 });
-
 
 module.exports = mongoose.model("Order", orderSchema);
