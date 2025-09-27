@@ -25,9 +25,18 @@ router.post("/subscribe", async (req, res) => {
 // ✅ Send Notification (and save to history)
 router.post("/send", async (req, res) => {
   const { title, body } = req.body;
-  const payload = JSON.stringify({ title, body });
 
   try {
+    // Save to history first
+    const notification = await NotificationHistory.create({ title, body });
+
+    // Include notificationId in payload
+    const payload = JSON.stringify({
+      title,
+      body,
+      notificationId: notification._id,
+    });
+
     const subscriptions = await Subscription.find({});
 
     await Promise.all(
@@ -42,15 +51,13 @@ router.post("/send", async (req, res) => {
       )
     );
 
-    // Save history
-    await NotificationHistory.create({ title, body });
-
     res.status(200).json({ message: "Notifications sent" });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to send notifications" });
   }
 });
+
 
 // ✅ Get Notification History
 router.get("/history", async (req, res) => {
@@ -71,6 +78,7 @@ router.post("/resend/:id", async (req, res) => {
     const payload = JSON.stringify({
       title: notification.title,
       body: notification.body,
+      notificationId: notification._id,
     });
 
     const subscriptions = await Subscription.find({});
@@ -87,6 +95,37 @@ router.post("/resend/:id", async (req, res) => {
     res.json({ message: "Notification resent successfully" });
   } catch (err) {
     res.status(500).json({ error: "Failed to resend notification" });
+  }
+});
+
+// GET /notifications/stats
+router.get("/stats", async (req, res) => {
+  try {
+    const totalSubscribers = await Subscription.countDocuments();
+    const visitedViaPush = await NotificationHistory.aggregate([
+      { $match: { visitedViaPush: { $exists: true } } },
+      { $group: { _id: null, total: { $sum: "$visitedViaPush" } } },
+    ]);
+
+    res.json({
+      totalSubscribers,
+      visitedViaPush: visitedViaPush[0]?.total || 0,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch stats" });
+  }
+});
+
+router.post("/track/:id", async (req, res) => {
+  try {
+    await NotificationHistory.findByIdAndUpdate(req.params.id, {
+      $inc: { visitedViaPush: 1 },
+    });
+    res.json({ message: "Visit tracked" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to track visit" });
   }
 });
 
