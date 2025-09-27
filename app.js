@@ -2,8 +2,10 @@ const express = require("express");
 const mongoose = require("mongoose");
 const morgan = require("morgan");
 const productRoutes = require("./Router/productRoutes");
+const dashboardRoutes = require("./Router/dashboardRoutes");
 const pincodeRoutes = require("./Router/pincodeRoutes");
 const orderRoutes = require("./Router/orderRoutes");
+const notificationRoutes = require("./Router/notificationRoutes");
 const analyticsRoutes = require("./Router/analyticsRoutes");
 const campaignRoutes = require("./Router/campaignRoutes");
 const shiprocketRoutes = require("./Router/shiprocketRoutes");
@@ -25,8 +27,9 @@ app.use(cors({
 app.use(morgan('dev'));
 // Routes
 app.use("/api/categories", categoryRoutes);
-
+app.use("/api/notifications", notificationRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 app.use("/api/analytics", shippingAnalyticsRoutes);
 app.use("/api/shiprocket", shiprocketRoutes);
 app.use("/api/products", productRoutes);

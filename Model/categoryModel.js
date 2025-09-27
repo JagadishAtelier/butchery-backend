@@ -1,9 +1,7 @@
 const mongoose = require("mongoose");
-
-// Category Schema
 const categorySchema = new mongoose.Schema(
   {
-    name: { type: String, required: true, unique: true }, // e.g., Chicken, Mutton, Fish
+    name: { type: String, required: true, unique: true }, 
     tamilName:{type : String , required : true},
     description: String,
     tamilDescription:{type : String},
