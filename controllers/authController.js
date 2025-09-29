@@ -116,20 +116,35 @@ exports.getProfile = async (req, res) => {
 
 exports.updateProfile = async (req, res) => {
   try {
-    const { name, email } = req.body;
+    const { name, email, phone, address } = req.body; 
+    // `address` can be an object with { label, street, city, state, pincode, landmark }
+
     const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ message: "User not found" });
 
     if (name) user.name = name;
     if (email && email !== user.email) {
       const exists = await User.findOne({ email });
-      if (exists) return res.status(400).json({ message: 'Email already in use' });
+      if (exists) return res.status(400).json({ message: "Email already in use" });
       user.email = email;
+    }
+    if (phone) user.phone = phone;
+
+    if (address) {
+      // If you want to replace all addresses:
+      // user.addresses = [address];
+
+      // Or append to existing addresses:
+      user.addresses = user.addresses || [];
+      // Mark as default if none exist
+      if (!user.addresses.some(a => a.isDefault)) address.isDefault = true;
+      user.addresses.push(address);
     }
 
     await user.save();
-    res.json({ message: 'Profile updated successfully' });
+    res.json({ message: "Profile updated successfully", user });
   } catch (err) {
-    res.status(500).json({ message: 'Update failed', error: err.message });
+    res.status(500).json({ message: "Update failed", error: err.message });
   }
 };
 

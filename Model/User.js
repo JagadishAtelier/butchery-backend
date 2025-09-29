@@ -24,7 +24,7 @@ const userSchema = new mongoose.Schema(
     dob: { type: Date },
 
     // ✅ Addresses (customers usually save multiple delivery addresses)
-    addresses: [
+    addresses:
       {
         label: { type: String }, // e.g., Home, Work
         street: { type: String },
@@ -34,7 +34,6 @@ const userSchema = new mongoose.Schema(
         landmark: { type: String },
         isDefault: { type: Boolean, default: false },
       },
-    ],
     // ✅ OTP Verification
     otp: { type: String },
     otpExpires: { type: Date },
