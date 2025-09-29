@@ -22,16 +22,18 @@ const userSchema = new mongoose.Schema(
     dob: { type: Date },
 
     // ✅ Addresses (customers usually save multiple delivery addresses)
-    addresses:
-      {
-        label: { type: String },
-        street: { type: String },
-        city: { type: String },
-        state: { type: String },
-        pincode: { type: String },
-        landmark: { type: String },
-        isDefault: { type: Boolean, default: false },
-      },
+    addresses: [
+  {
+    label: { type: String },
+    street: { type: String },
+    city: { type: String },
+    state: { type: String },
+    pincode: { type: String },
+    landmark: { type: String },
+    isDefault: { type: Boolean, default: false },
+  }
+],
+
     // ✅ OTP Verification
     otp: { type: String },
     otpExpires: { type: Date },
