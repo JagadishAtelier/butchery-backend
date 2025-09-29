@@ -115,39 +115,85 @@ exports.getProfile = async (req, res) => {
 };
 
 
+// update-profile controller (supports addresses)
 exports.updateProfile = async (req, res) => {
   try {
-    const { name, email, phone, address } = req.body; 
-    // `address` can be an object with { label, street, city, state, pincode, landmark }
-
+    const { name, email,phone, addresses } = req.body;
     const user = await User.findById(req.user._id);
-    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!user) return res.status(404).json({ message: 'User not found' });
 
+    // update basic profile fields
     if (name) user.name = name;
+
     if (email && email !== user.email) {
       const exists = await User.findOne({ email });
-      if (exists) return res.status(400).json({ message: "Email already in use" });
+      if (exists && exists._id.toString() !== user._id.toString()) {
+        return res.status(400).json({ message: 'Email already in use' });
+      }
       user.email = email;
     }
-    if (phone) user.phone = phone;
 
-    if (address) {
-      // If you want to replace all addresses:
-      // user.addresses = [address];
+    // handle addresses if provided
+    if (typeof addresses !== 'undefined') {
+      if (!Array.isArray(addresses)) {
+        return res.status(400).json({ message: 'Addresses must be an array' });
+      }
 
-      // Or append to existing addresses:
-      user.addresses = user.addresses || [];
-      // Mark as default if none exist
-      if (!user.addresses.some(a => a.isDefault)) address.isDefault = true;
-      user.addresses.push(address);
+      // sanitize and normalize incoming address objects
+      const sanitized = addresses.map((a) => ({
+        label: (a.label || '').trim(),
+        street: (a.street || '').trim(),
+        city: (a.city || '').trim(),
+        state: (a.state || '').trim(),
+        pincode: a.pincode ? String(a.pincode).trim() : '',
+        landmark: a.landmark ? String(a.landmark).trim() : '',
+        isDefault: !!a.isDefault,
+      }));
+
+      // validate required fields for each address
+      for (let i = 0; i < sanitized.length; i += 1) {
+        const addr = sanitized[i];
+        if (!addr.label || !addr.street || !addr.city || !addr.pincode) {
+          return res.status(400).json({
+            message: `Address at index ${i} missing required fields (label, street, city, pincode).`,
+          });
+        }
+        // basic pincode validation (adjust to your country's rule if needed)
+        if (!/^\d{4,10}$/.test(addr.pincode)) {
+          return res.status(400).json({
+            message: `Address at index ${i} has invalid pincode.`,
+          });
+        }
+      }
+
+      // ensure at most one default address: keep the first default and unset others
+      const defaultCount = sanitized.filter((a) => a.isDefault).length;
+      if (defaultCount > 1) {
+        let seen = false;
+        sanitized.forEach((a) => {
+          if (a.isDefault) {
+            if (!seen) seen = true;
+            else a.isDefault = false;
+          }
+        });
+      }
+
+      // assign sanitized addresses to user
+      user.addresses = sanitized;
     }
 
     await user.save();
-    res.json({ message: "Profile updated successfully", user });
+
+    // avoid returning sensitive fields
+    const userObj = user.toObject ? user.toObject() : user;
+    if (userObj.password) delete userObj.password;
+
+    return res.json({ message: 'Profile updated successfully', user: userObj });
   } catch (err) {
-    res.status(500).json({ message: "Update failed", error: err.message });
+    return res.status(500).json({ message: 'Update failed', error: err.message });
   }
 };
+
 
 exports.changePassword = async (req, res) => {
   try {
