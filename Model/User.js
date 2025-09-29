@@ -12,13 +12,11 @@ const userSchema = new mongoose.Schema(
     },
     password: { type: String, required: true },
 
-    // ✅ Role
     role: {
       type: String,
       enum: ["admin", "customer", "delivery"],
       default: "customer",
     },
-    // ✅ Customer profile info
     phone: { type: String },
     gender: { type: String, enum: ["Male", "Female", "Other"] },
     dob: { type: Date },
@@ -26,7 +24,7 @@ const userSchema = new mongoose.Schema(
     // ✅ Addresses (customers usually save multiple delivery addresses)
     addresses:
       {
-        label: { type: String }, // e.g., Home, Work
+        label: { type: String },
         street: { type: String },
         city: { type: String },
         state: { type: String },
