@@ -28,6 +28,7 @@ exports.login = async function (req, res) {
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
+    console.log(JWT_SECRET);
 
     const token = jwt.sign({ userId: user._id, role: user.role }, JWT_SECRET, { expiresIn: '1d' });
     res.status(200).json({ token, user: { id: user._id, name: user.name, email: user.email ,role:user.role } });
@@ -96,7 +97,7 @@ exports.resetPassword = async (req, res) => {
   const user = await User.findOne({ email, otp, otpExpires: { $gt: Date.now() } });
   if (!user) return res.status(400).json({ message: 'Invalid or expired OTP' });
 
-  user.password = newPassword; // pre-save hook will hash
+  user.password = newPassword;
   user.otp = undefined;
   user.otpExpires = undefined;
   await user.save();

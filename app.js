@@ -14,6 +14,7 @@ const categoryRoutes = require("./Router/categoryRoutes");
 const razorpay  = require("./Router/razorpay");
 const shippingAnalyticsRoutes = require("./Router/shippingAnalyticsRoutes");
 const cartRoutes = require('./Router/cartRoutes')
+const pilotRoutes = require('./Router/pilotuserRoutes')
 const cors = require("cors")
 const app = express();
 require("dotenv").config();
@@ -40,5 +41,6 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/payment", razorpay);
 app.use("/api/campaigns", campaignRoutes);
 app.use("/api/cart", cartRoutes);
+app.use("/api/pilot", pilotRoutes);
 
 module.exports = app;
