@@ -11,6 +11,7 @@ const campaignRoutes = require("./Router/campaignRoutes");
 const shiprocketRoutes = require("./Router/shiprocketRoutes");
 const authRoutes = require("./Router/authRoutes")
 const categoryRoutes = require("./Router/categoryRoutes");
+const razorpay  = require("./Router/razorpay");
 const shippingAnalyticsRoutes = require("./Router/shippingAnalyticsRoutes");
 const cartRoutes = require('./Router/cartRoutes')
 const cors = require("cors")
@@ -36,6 +37,7 @@ app.use("/api/products", productRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/pincodes", pincodeRoutes);
 app.use("/api/orders", orderRoutes);
+app.use("/api/payment", razorpay);
 app.use("/api/campaigns", campaignRoutes);
 app.use("/api/cart", cartRoutes);
 
