@@ -1,24 +1,87 @@
 const Order = require("../Model/Order");
 
-// 📌 Create a new order
 exports.createOrder = async (req, res) => {
   try {
-    // Ensure unique order id (optional: you can generate a unique ID if not provided)
-    if (!req.body.id) {
-      req.body.id = `ORD${Date.now()}`;
+    const {
+      buyer, // user ID
+      buyerDetails,
+      shippingAddress,
+      location,
+      pingLocation,
+      deliveryInstructions,
+      paymentMethod,
+      paymentStatus,
+      paymentDate,
+      paymentVerifiedAt,
+      razorpayOrderId,
+      razorpayPaymentId,
+      razorpaySignature,
+      products,
+      subtotal,
+      discount = 0,
+      taxAmount = 0,
+      shippingFee = 0,
+      total,
+      finalAmount,
+      gstNumber,
+      companyName,
+    } = req.body;
+
+    // 🧾 Generate unique orderId if not provided
+    const orderId = req.body.orderId || `ORD${Date.now()}`;
+
+    // 💰 Auto-calculate final amount if missing
+    const computedFinalAmount =
+      finalAmount || (total ?? 0) - discount + taxAmount + shippingFee;
+
+    // ✅ Validate essential fields
+    if (!buyer || !products?.length || !location) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required fields: buyer, products, or location.",
+      });
     }
 
-    // Calculate finalAmount if not provided
-    if (!req.body.finalAmount) {
-      req.body.finalAmount = (req.body.total || 0) - (req.body.discount || 0);
-    }
+    // 🧱 Build order payload (only include allowed fields)
+    const orderData = {
+      orderId,
+      buyer,
+      buyerDetails,
+      shippingAddress,
+      location,
+      pingLocation,
+      deliveryInstructions,
+      paymentMethod,
+      paymentStatus,
+      paymentDate,
+      paymentVerifiedAt,
+      razorpayOrderId,
+      razorpayPaymentId,
+      razorpaySignature,
+      products,
+      subtotal,
+      discount,
+      taxAmount,
+      shippingFee,
+      total,
+      finalAmount: computedFinalAmount,
+      gstNumber,
+      companyName,
+    };
 
-    const order = await Order.create(req.body);
-    res.status(201).json({ success: true, data: order });
+    const order = await Order.create(orderData);
+
+    res.status(201).json({
+      success: true,
+      message: "Order created successfully ✅",
+      data: order,
+    });
   } catch (err) {
-    res.status(400).json({ success: false, error: err.message });
+    console.error("Order creation failed:", err);
+    res.status(500).json({ success: false, error: err.message });
   }
 };
+
 
 // 📌 Get all orders
 exports.getOrders = async (req, res) => {
@@ -54,8 +117,8 @@ exports.getOrderById = async (req, res) => {
 exports.getOrderbyuserId = async (req, res) => {
   try {
     const orders = await Order.find({ buyer: req.params.userId })
-      .populate("buyer", "name email") // fetch buyer name & email
-      .populate("products.productId", "name price image") // ✅ include image field
+      .populate("buyer", "name email address") // fetch buyer name & email
+      .populate("products.productId", "name price images") // ✅ include image field
       .sort({ createdAt: -1 });
 
     res.json({ success: true, data: orders });

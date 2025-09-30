@@ -1,50 +1,92 @@
-// Model/Order.js
 const mongoose = require("mongoose");
 
 const orderSchema = new mongoose.Schema(
   {
     orderId: { type: String, unique: true },
 
+    // 🔹 Buyer info
     buyer: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    buyerDetails: {
+      name: String,
+      email: String,
+      phone: String,
+    },
+
+    // 🔹 Shipping info
+    shippingAddress: {
+      firstName: String,
+      lastName: String,
+      addressLine1: String,
+      addressLine2: String,
+      city: String,
+      state: String,
+      pincode: String,
+      country: { type: String, default: "India" },
+    },
+
     location: { type: String, required: true },
     deliveryInstructions: { type: String },
 
-    // extended statuses to support claim/assignment lifecycle
+    // 🔹 Order status lifecycle
     status: {
       type: String,
-      enum: ["pending", "claimed", "Reached Pickup Point", "Picked Up","Delivered", "cancelled"],
+      enum: [
+        "pending",
+        "claimed",
+        "Reached Pickup Point",
+        "Picked Up",
+        "Delivered",
+        "cancelled",
+      ],
       default: "pending",
-      lowercase: true
+      lowercase: true,
     },
 
+    // 🔹 Payment info
     paymentMethod: {
       type: String,
-      enum: ["COD", "UPI", "Card", "NetBanking", "Wallet"],
+      enum: ["COD", "online"],
       required: true,
     },
     paymentStatus: {
       type: String,
-      enum: ["pending", "Paid", "failed", "refunded"],
+      enum: ["pending", "paid", "failed", "refunded"],
       default: "pending",
-      lowercase: true
+      lowercase: true,
     },
     paymentDate: Date,
+    paymentVerifiedAt: Date,
 
+    // Razorpay integration
+    razorpayOrderId: String,
+    razorpayPaymentId: String,
+    razorpaySignature: String,
+
+    // 🔹 Products
     products: [
       {
         productId: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
-        weight: { type: Number },
-        price: { type: Number },
+        name: String, // optional snapshot
+        weight: Number,
+        price: Number,
         quantity: { type: Number, default: 1 },
       },
     ],
 
-    total: { type: Number, required: true },
+    // 🔹 Pricing breakdown
+    subtotal: { type: Number },
     discount: { type: Number, default: 0 },
+    taxAmount: { type: Number, default: 0 },
+    shippingFee: { type: Number, default: 0 },
+    total: { type: Number, required: true },
     finalAmount: { type: Number, required: true },
 
-    // --- Ping location (GeoJSON Point) + timestamp
-    // NOTE: GeoJSON coordinate order is [longitude, latitude]
+    // 🔹 GST / Business info
+    gstNumber: String,
+    companyName: String,
+    invoiceUrl: String,
+
+    // 🔹 Geo + assignment
     pingLocation: {
       type: {
         type: String,
@@ -53,129 +95,87 @@ const orderSchema = new mongoose.Schema(
       },
       coordinates: {
         type: [Number], // [lng, lat]
-        default: undefined, // keep undefined unless provided
+        default: undefined,
       },
     },
-    pingedAt: { type: Date }, // when the ping was recorded
+    pingedAt: Date,
 
-    // ----- Claiming fields for real-time assignment -----
+    // 🔹 Delivery lifecycle timestamps
     claimedBy: { type: mongoose.Schema.Types.ObjectId, ref: "PilotUser", default: null },
     claimedAt: { type: Date, default: null },
-    claimExpiresAt: { type: Date, default: null }
+    claimExpiresAt: { type: Date, default: null },
+    deliveredAt: Date,
+    cancelledAt: Date,
   },
   { timestamps: true }
 );
 
-// create 2dsphere index for geo queries
+// 🗺️ Indexes
 orderSchema.index({ pingLocation: "2dsphere" });
-// index for quick lookup of available orders
 orderSchema.index({ status: 1, claimExpiresAt: 1 });
 
-/**
- * NOTE on orderId generation:
- * Your previous pre-save logic incremented by checking last order's orderId.
- * That can be a race condition under heavy concurrency.
- * Below I keep similar logic, but for production consider using:
- *  - a separate counters collection (atomic increments)
- *  - or a timestamp-based id: `ORD${Date.now()}`
- */
-
-// 🔹 Auto-generate incremental orderId before saving
-orderSchema.pre("save", async function (next) {
+// 🧾 Auto-generate orderId
+orderSchema.pre("save", function (next) {
   if (!this.orderId) {
-    try {
-      // safer: use timestamp to avoid concurrency collisions
-      // comment out if you still prefer ORD1, ORD2...
-      this.orderId = `ORD${Date.now()}`;
-
-      // If you *must* keep incremental numeric ids, use a counter collection instead.
-      // Example (not implemented here): a 'counters' collection with findOneAndUpdate({ _id: 'orderId' }, { $inc: { seq: 1 }}, {new:true, upsert:true})
-      next();
-    } catch (err) {
-      next(err);
-    }
-  } else {
-    next();
+    this.orderId = `ORD${Date.now()}`;
   }
+  next();
 });
 
-/**
- * Static helper: try to atomically claim an order
- * - orderIdOrId: can be Mongo _id or orderId (string). We'll attempt both.
- * - pilotId: ObjectId or string
- * - claimDurationMs: how long the claim should be valid (e.g. 2 * 60 * 1000)
- *
- * Returns the updated order doc (populated) on success or null on failure.
- */
+// 🛠️ Static helpers (optional)
 orderSchema.statics.claimOrder = async function (orderIdOrId, pilotId, claimDurationMs = 2 * 60 * 1000) {
   const ObjectId = mongoose.Types.ObjectId;
   const now = new Date();
   const claimExpiresAt = new Date(now.getTime() + claimDurationMs);
 
-  // Build a query that allows claiming if:
-  //  - claimedBy is null (never claimed)
-  //  - OR claimExpiresAt is in the past (previous claim expired)
-  //  - status is 'pending' (only pending orders can be claimed)
-  const queryById = {
+  const queryBase = {
     $and: [
-      {
-        $or: [
-          { claimedBy: null },
-          { claimExpiresAt: { $lte: new Date() } },
-          { claimExpiresAt: null }
-        ]
+      { $or: [{ claimedBy: null }, { claimExpiresAt: { $lte: new Date() } }, { claimExpiresAt: null }] },
+      { status: "pending" },
+    ],
+  };
+
+  const query = ObjectId.isValid(orderIdOrId)
+    ? { _id: ObjectId(orderIdOrId), ...queryBase }
+    : { orderId: orderIdOrId, ...queryBase };
+
+  const updated = await this.findOneAndUpdate(
+    query,
+    {
+      $set: {
+        claimedBy: ObjectId(pilotId),
+        claimedAt: now,
+        claimExpiresAt,
+        status: "claimed",
       },
-      { status: 'pending' }
-    ]
-  };
-
-  // try matching by Mongo _id if looks like an ObjectId
-  let query = null;
-  if (ObjectId.isValid(orderIdOrId)) {
-    query = { _id: ObjectId(orderIdOrId), ...queryById };
-  } else {
-    // fallback to orderId field
-    query = { orderId: orderIdOrId, ...queryById };
-  }
-
-  const update = {
-    $set: {
-      claimedBy: ObjectId(pilotId),
-      claimedAt: now,
-      claimExpiresAt,
-      status: 'assigned'
-    }
-  };
-
-  // atomic update
-  const updated = await this.findOneAndUpdate(query, update, { new: true })
-    .populate('buyer', 'name email')
-    .populate('claimedBy', 'name email')
+    },
+    { new: true }
+  )
+    .populate("buyer", "name email")
+    .populate("claimedBy", "name email")
     .lean();
 
-  return updated; // null if couldn't claim
+  return updated;
 };
 
-/**
- * Static helper: release a claim if pilot owns it (explicit release)
- */
 orderSchema.statics.releaseClaim = async function (orderIdOrId, pilotId) {
   const ObjectId = mongoose.Types.ObjectId;
   const query = ObjectId.isValid(orderIdOrId)
     ? { _id: ObjectId(orderIdOrId), claimedBy: ObjectId(pilotId) }
     : { orderId: orderIdOrId, claimedBy: ObjectId(pilotId) };
 
-  const update = {
-    $set: {
-      claimedBy: null,
-      claimedAt: null,
-      claimExpiresAt: null,
-      status: 'pending'
-    }
-  };
-
-  const updated = await this.findOneAndUpdate(query, update, { new: true });
-  return updated;
+  return this.findOneAndUpdate(
+    query,
+    {
+      $set: {
+        claimedBy: null,
+        claimedAt: null,
+        claimExpiresAt: null,
+        status: "pending",
+      },
+    },
+    { new: true }
+  );
 };
 
 module.exports = mongoose.model("Order", orderSchema);
