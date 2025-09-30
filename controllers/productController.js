@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 const Product = require("../Model/ProductModel");
-
+const Category = require("../Model/categoryModel");
 // 📌 Create Product
 exports.createProduct = async (req, res) => {
   try {
@@ -15,12 +15,24 @@ exports.createProduct = async (req, res) => {
 // 📌 Get All Products
 exports.getProducts = async (req, res) => {
   try {
-    const products = await Product.find();
+    const products = await Product.find()
+      .populate({
+        path: "category",
+        select: "name tamilName imageUrl", // Only select the fields you need from the Category model
+      })
+      // No need to populate for discountPrice as it's an embedded field
+      .lean(); // Use .lean() for faster query results if you don't need Mongoose documents
+
+    // Optional: You can add logic here to calculate a 'best' discount or
+    // format the products if needed before sending.
+
     res.json({ success: true, data: products });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error("Error fetching products:", error); // Log the actual error for debugging
+    res.status(500).json({ success: false, message: "Failed to fetch products.", error: error.message });
   }
 };
+
 
 // 📌 Get Product by ID
 exports.getProductById = async (req, res) => {

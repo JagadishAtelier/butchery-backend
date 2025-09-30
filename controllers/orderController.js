@@ -76,6 +76,38 @@ exports.createOrder = async (req, res) => {
       message: "Order created successfully ✅",
       data: order,
     });
+  // -------------------------
+    // Real-time notifications
+    // -------------------------
+    const io = req.app?.locals?.io;
+
+    if (io) {
+      // Notify admins of new order
+      io.to("admins").emit("newOrder", {
+        orderId: order._id,
+        buyer: order.buyerDetails,
+        total: order.total,
+        finalAmount: order.finalAmount,
+        status: order.status,
+      });
+
+      // Notify all pilots of updated unclaimed orders
+      const unclaimedOrders = await Order.find({ claimedBy: null })
+        .populate("buyer", "name email")
+        .populate("products.productId", "name price");
+      
+      io.to("pilots").emit("ordersUpdate", {
+        orders: unclaimedOrders.map((o) => ({
+          _id: o._id,
+          orderId: o.orderId,
+          total: o.total,
+          finalAmount: o.finalAmount,
+          itemsCount: o.products?.length || 0,
+          createdAt: o.createdAt,
+          status: o.status,
+        })),
+      });
+    }
   } catch (err) {
     console.error("Order creation failed:", err);
     res.status(500).json({ success: false, error: err.message });
@@ -88,7 +120,7 @@ exports.getOrders = async (req, res) => {
   try {
     const orders = await Order.find()
       .populate("buyer", "name email") 
-      .populate("products.productId", "name price")
+      .populate("products.productId", "name price images")
       .populate("claimedBy", "name email phone")
       .sort({ createdAt: -1 });
     res.json({ success: true, data: orders });
@@ -103,7 +135,7 @@ exports.getOrderById = async (req, res) => {
     // Use findById instead of findOne
     const order = await Order.findById(req.params.id)
       .populate("buyer", "name email")
-      .populate("products.productId", "name price");
+      .populate("products.productId", "name price images")
 
     if (!order)
       return res.status(404).json({ success: false, message: "Order not found" });
@@ -243,7 +275,7 @@ exports.claimOrder = async (req, res) => {
 
 exports.updateOrderStatus = async (req, res) => {
   try {
-    const { status } = req.body; // pass new status in request body
+    const { status } = req.body;
     const order = await Order.findById(req.params.id);
 
     if (!order) {
@@ -257,33 +289,39 @@ exports.updateOrderStatus = async (req, res) => {
       });
     }
 
-    // ✅ Update order status
     order.status = status;
     await order.save();
 
     res.json({ success: true, data: order });
 
-    // ✅ Emit socket event dynamically
-    try {
-      const io = req.app?.locals?.io;
-      if (io) {
-        const eventMap = {
-          "Reached Pickup Point": "orderReached",
-          "Picked Up": "orderPickedUp",
-          "Delivered": "orderDelivered",
-        };
+    // -------------------------
+    // Real-time notifications
+    // -------------------------
+    const io = req.app?.locals?.io;
+    if (io) {
+      const eventMap = {
+        "Reached Pickup Point": "orderReached",
+        "Picked Up": "orderPickedUp",
+        "Delivered": "orderDelivered",
+      };
 
-        if (eventMap[status]) {
-          io.to("pilots").emit(eventMap[status], { orderId: order.orderId });
-        }
+      const eventName = eventMap[status];
+      if (eventName) {
+        // Notify the claiming pilot
+        io.to(`pilot_${order.claimedBy}`).emit(eventName, { orderId: order.orderId });
+
+        // Notify all admins
+        io.to("admins").emit(eventName, {
+          orderId: order.orderId,
+          claimedBy: order.claimedBy,
+        });
       }
-    } catch (emitErr) {
-      console.error("Socket emit failed:", emitErr);
     }
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });
   }
 };
+
 
 
 // �� Get all completed orders (for pilots)
