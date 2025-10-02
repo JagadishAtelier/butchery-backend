@@ -71,4 +71,26 @@ router.post("/refund", async (req, res) => {
   }
 });
 
+router.get("/settlements", async (req, res) => {
+  try {
+    // Optional: filter by date range
+    const { from, to } = req.query; // timestamps in seconds
+    const params = {
+      count: 50,
+      skip: 0,
+    };
+    if (from) params.from = parseInt(from);
+    if (to) params.to = parseInt(to);
+
+    const settlements = await razorpay.payments.settlements(params); 
+    // Note: Razorpay JS SDK may not have 'settlements'; in that case use axios:
+    // const settlements = await axios.get("https://api.razorpay.com/v1/payouts", { auth: { username: process.env.RAZORPAY_KEY_ID, password: process.env.RAZORPAY_SECRET }});
+
+    res.json(settlements);
+  } catch (err) {
+    console.error("Failed to fetch settlements:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router; // ✅ CommonJS export

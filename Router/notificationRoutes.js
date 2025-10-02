@@ -1,5 +1,5 @@
 const express = require("express");
-const router = express.Router();
+const   router = express.Router();
 const webpush = require("../services/notifications");
 const Subscription = require("../Model/Subscription");
 const NotificationHistory = require("../Model/NotificationHistory");
