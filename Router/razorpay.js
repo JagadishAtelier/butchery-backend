@@ -5,13 +5,13 @@ const crypto = require("crypto");
 const router = express.Router();
 require("dotenv").config();
 const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID || "rzp_test_RNK9XtSrh66IwC",
-  key_secret: process.env.RAZORPAY_SECRET || "OJvGrVaiGKkTRa6fcCWCLWS4",
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_SECRET,
 });
 
 router.post("/create-order", async (req, res) => {
-    console.log("Razorpay Key ID:", process.env.RAZORPAY_KEY_ID);
-console.log("Razorpay Secret:", process.env.RAZORPAY_SECRET);
+  console.log("Razorpay Key ID:", process.env.RAZORPAY_KEY_ID);
+  console.log("Razorpay Secret:", process.env.RAZORPAY_SECRET);
   try {
     const { amount, currency = "INR" } = req.body;
     console.log("Creating order with amount:", amount, "currency:", currency);
@@ -30,10 +30,14 @@ console.log("Razorpay Secret:", process.env.RAZORPAY_SECRET);
 
 router.post("/verify", (req, res) => {
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
+      req.body;
     const sign = razorpay_order_id + "|" + razorpay_payment_id;
     const expectedSign = crypto
-      .createHmac("sha256", process.env.RAZORPAY_SECRET || "OJvGrVaiGKkTRa6fcCWCLWS4")
+      .createHmac(
+        "sha256",
+        process.env.RAZORPAY_SECRET || "OJvGrVaiGKkTRa6fcCWCLWS4"
+      )
       .update(sign)
       .digest("hex");
 
@@ -66,6 +70,5 @@ router.post("/refund", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
 
 module.exports = router; // ✅ CommonJS export
