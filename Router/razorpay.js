@@ -47,4 +47,25 @@ router.post("/verify", (req, res) => {
   }
 });
 
+router.get("/list", async (req, res) => {
+  try {
+    const payments = await razorpay.payments.all({ count: 100 });
+    res.json(payments.items);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ✅ Refund a Payment
+router.post("/refund", async (req, res) => {
+  try {
+    const { payment_id } = req.body;
+    const refund = await razorpay.payments.refund(payment_id);
+    res.json(refund);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 module.exports = router; // ✅ CommonJS export
