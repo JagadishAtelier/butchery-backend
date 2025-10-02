@@ -1,4 +1,6 @@
+// orderController.js
 const Order = require("../Model/Order");
+const mongoose = require("mongoose");
 
 exports.createOrder = async (req, res) => {
   try {
@@ -17,7 +19,7 @@ exports.createOrder = async (req, res) => {
       razorpayPaymentId,
       razorpaySignature,
       products,
-      subtotal,
+      subtotal = 0,
       discount = 0,
       taxAmount = 0,
       shippingFee = 0,
@@ -27,13 +29,6 @@ exports.createOrder = async (req, res) => {
       companyName,
     } = req.body;
 
-    // 🧾 Generate unique orderId if not provided
-    const orderId = req.body.orderId || `ORD${Date.now()}`;
-
-    // 💰 Auto-calculate final amount if missing
-    const computedFinalAmount =
-      finalAmount || (total ?? 0) - discount + taxAmount + shippingFee;
-
     // ✅ Validate essential fields
     if (!buyer || !products?.length || !location) {
       return res.status(400).json({
@@ -41,6 +36,21 @@ exports.createOrder = async (req, res) => {
         message: "Missing required fields: buyer, products, or location.",
       });
     }
+
+    // 🧾 Generate unique orderId if not provided
+    const orderId = req.body.orderId || `ORD${Date.now()}`;
+
+    // 💰 Calculate total and finalAmount deterministically
+    const computedTotal = typeof total === "number" ? total : products.reduce((sum, p) => {
+      const price = Number(p.price ?? 0);
+      const qty = Number(p.quantity ?? 1);
+      return sum + price * qty;
+    }, 0);
+
+    const computedFinalAmount =
+      typeof finalAmount === "number"
+        ? finalAmount
+        : computedTotal - (discount || 0) + (taxAmount || 0) + (shippingFee || 0);
 
     // 🧱 Build order payload (only include allowed fields)
     const orderData = {
@@ -63,7 +73,7 @@ exports.createOrder = async (req, res) => {
       discount,
       taxAmount,
       shippingFee,
-      total,
+      total: computedTotal,
       finalAmount: computedFinalAmount,
       gstNumber,
       companyName,
@@ -71,31 +81,25 @@ exports.createOrder = async (req, res) => {
 
     const order = await Order.create(orderData);
 
-    res.status(201).json({
-      success: true,
-      message: "Order created successfully ✅",
-      data: order,
-    });
-  // -------------------------
-    // Real-time notifications
-    // -------------------------
+    // Real-time notifications (emit BEFORE final response is fine; either works)
     const io = req.app?.locals?.io;
-
     if (io) {
       // Notify admins of new order
       io.to("admins").emit("newOrder", {
-        orderId: order._id,
+        _id: order._id,
+        orderId: order.orderId,
         buyer: order.buyerDetails,
         total: order.total,
         finalAmount: order.finalAmount,
         status: order.status,
+        createdAt: order.createdAt,
       });
 
-      // Notify all pilots of updated unclaimed orders
+      // Notify pilots with snapshot of unclaimed orders
       const unclaimedOrders = await Order.find({ claimedBy: null })
         .populate("buyer", "name email")
         .populate("products.productId", "name price");
-      
+
       io.to("pilots").emit("ordersUpdate", {
         orders: unclaimedOrders.map((o) => ({
           _id: o._id,
@@ -108,18 +112,23 @@ exports.createOrder = async (req, res) => {
         })),
       });
     }
+
+    return res.status(201).json({
+      success: true,
+      message: "Order created successfully ✅",
+      data: order,
+    });
   } catch (err) {
     console.error("Order creation failed:", err);
-    res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({ success: false, error: err.message });
   }
 };
-
 
 // 📌 Get all orders
 exports.getOrders = async (req, res) => {
   try {
     const orders = await Order.find()
-      .populate("buyer", "name email") 
+      .populate("buyer", "name email")
       .populate("products.productId", "name price images")
       .populate("claimedBy", "name email phone")
       .sort({ createdAt: -1 });
@@ -132,13 +141,11 @@ exports.getOrders = async (req, res) => {
 // 📌 Get a single order by ID
 exports.getOrderById = async (req, res) => {
   try {
-    // Use findById instead of findOne
     const order = await Order.findById(req.params.id)
       .populate("buyer", "name email")
-      .populate("products.productId", "name price images")
+      .populate("products.productId", "name price images");
 
-    if (!order)
-      return res.status(404).json({ success: false, message: "Order not found" });
+    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
 
     res.json({ success: true, data: order });
   } catch (err) {
@@ -149,8 +156,8 @@ exports.getOrderById = async (req, res) => {
 exports.getOrderbyuserId = async (req, res) => {
   try {
     const orders = await Order.find({ buyer: req.params.userId })
-      .populate("buyer", "name email address") // fetch buyer name & email
-      .populate("products.productId", "name price images") // ✅ include image field
+      .populate("buyer", "name email address")
+      .populate("products.productId", "name price images")
       .sort({ createdAt: -1 });
 
     res.json({ success: true, data: orders });
@@ -162,19 +169,17 @@ exports.getOrderbyuserId = async (req, res) => {
 // 📌 Update an order by ID
 exports.updateOrder = async (req, res) => {
   try {
-    // If updating total or discount, recalculate finalAmount
-    if (req.body.total || req.body.discount) {
-      req.body.finalAmount = (req.body.total || 0) - (req.body.discount || 0);
+    // If updating total/discount/taxes/shipping, recalc finalAmount if not explicitly provided
+    if ((req.body.total || req.body.discount || req.body.taxAmount || req.body.shippingFee) && typeof req.body.finalAmount !== "number") {
+      req.body.finalAmount = (req.body.total ?? 0) - (req.body.discount ?? 0) + (req.body.taxAmount ?? 0) + (req.body.shippingFee ?? 0);
     }
 
-    const order = await Order.findOneAndUpdate({ id: req.params.id }, req.body, {
-      new: true,
-    })
+    // use findByIdAndUpdate (fix bug where code used { id: req.params.id })
+    const order = await Order.findByIdAndUpdate(req.params.id, req.body, { new: true })
       .populate("buyer", "name email")
       .populate("products.productId", "name price");
 
-    if (!order)
-      return res.status(404).json({ success: false, message: "Order not found" });
+    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
 
     res.json({ success: true, data: order });
   } catch (err) {
@@ -185,11 +190,9 @@ exports.updateOrder = async (req, res) => {
 // 📌 Delete an order by ID
 exports.deleteOrder = async (req, res) => {
   try {
-    // Use findByIdAndDelete instead of findOneAndDelete
     const order = await Order.findByIdAndDelete(req.params.id);
 
-    if (!order)
-      return res.status(404).json({ success: false, message: "Order not found" });
+    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
 
     res.json({ success: true, message: "Order deleted successfully" });
   } catch (err) {
@@ -197,11 +200,10 @@ exports.deleteOrder = async (req, res) => {
   }
 };
 
-
 // 📌 Get all unclaimed orders (for pilots)
 exports.getOrdersbynotclaime = async (req, res) => {
   try {
-    const orders = await Order.find({ claimedBy: null }) // ✅ only orders not yet taken
+    const orders = await Order.find({ claimedBy: null })
       .populate("buyer", "name email")
       .populate("products.productId", "name price")
       .sort({ createdAt: -1 });
@@ -232,38 +234,52 @@ exports.getOrdersbynotclaime = async (req, res) => {
   }
 };
 
-
-
-// �� Update an order status to "claimed" by a pilot
+// �� Claim an order (REST) — now atomic using findOneAndUpdate
 exports.claimOrder = async (req, res) => {
   try {
-    const order = await Order.findById(req.params.id);
-
-    if (!order) {
-      return res.status(404).json({ success: false, message: "Order not found" });
+    const orderId = req.params.id;
+    const pilotId = req.pilot?.id;
+    if (!pilotId) {
+      return res.status(401).json({ success: false, message: "Pilot auth required" });
     }
 
-    if (order.claimedBy) {
-      return res.status(400).json({
-        success: false,
-        message: "This order is already claimed",
-      });
+    const ObjectId = mongoose.Types.ObjectId;
+    const now = new Date();
+    const claimDurationMs = 2 * 60 * 1000; // 2 minutes
+    const claimExpiresAt = new Date(now.getTime() + claimDurationMs);
+
+    const claimed = await Order.findOneAndUpdate(
+      {
+        _id: ObjectId(orderId),
+        $or: [{ claimedBy: null }, { claimExpiresAt: { $lte: new Date() } }, { claimExpiresAt: null }],
+        status: "pending",
+      },
+      {
+        $set: {
+          claimedBy: ObjectId(pilotId),
+          claimedAt: now,
+          claimExpiresAt,
+          status: "claimed",
+        },
+      },
+      { new: true }
+    )
+      .populate("buyer", "name email")
+      .populate("products.productId", "name price");
+
+    if (!claimed) {
+      return res.status(400).json({ success: false, message: "Already claimed or unavailable" });
     }
 
-    // ✅ Claim the order
-    order.claimedBy = req.pilot.id;
-    order.status = "claimed";
-    await order.save();
+    res.json({ success: true, data: claimed });
 
-    res.json({ success: true, data: order });
-
+    // emit updates
     try {
       const io = req.app?.locals?.io;
       if (io) {
-        io.to("pilots").emit("orderClaimed", {
-          orderId: order.orderId,
-          claimedBy: req.pilot.id,
-        });
+        io.to("pilots").emit("orderClaimed", { orderId: claimed.orderId, claimedBy: pilotId });
+        io.to(`pilot_${pilotId}`).emit("orderAssigned", { order: claimed });
+        io.to("admins").emit("orderClaimed", { orderId: claimed.orderId, claimedBy: pilotId });
       }
     } catch (emitErr) {
       console.error("Socket emit failed:", emitErr);
@@ -276,20 +292,21 @@ exports.claimOrder = async (req, res) => {
 exports.updateOrderStatus = async (req, res) => {
   try {
     const { status } = req.body;
+    // allowed statuses must match schema
+    const allowed = ["pending", "claimed", "reached_pickup", "picked_up", "delivered", "cancelled"];
+    if (!allowed.includes(status)) return res.status(400).json({ success: false, message: "Invalid status" });
+
     const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
 
-    if (!order) {
-      return res.status(404).json({ success: false, message: "Order not found" });
-    }
-
-    if (!order.claimedBy) {
-      return res.status(400).json({
-        success: false,
-        message: "This order is not claimed",
-      });
+    if (!order.claimedBy && ["reached_pickup", "picked_up", "delivered"].includes(status)) {
+      return res.status(400).json({ success: false, message: "This order is not claimed" });
     }
 
     order.status = status;
+    if (status === "delivered") order.deliveredAt = new Date();
+    if (status === "cancelled") order.cancelledAt = new Date();
+
     await order.save();
 
     res.json({ success: true, data: order });
@@ -300,21 +317,15 @@ exports.updateOrderStatus = async (req, res) => {
     const io = req.app?.locals?.io;
     if (io) {
       const eventMap = {
-        "Reached Pickup Point": "orderReached",
-        "Picked Up": "orderPickedUp",
-        "Delivered": "orderDelivered",
+        reached_pickup: "orderReached",
+        picked_up: "orderPickedUp",
+        delivered: "orderDelivered",
       };
 
       const eventName = eventMap[status];
       if (eventName) {
-        // Notify the claiming pilot
         io.to(`pilot_${order.claimedBy}`).emit(eventName, { orderId: order.orderId });
-
-        // Notify all admins
-        io.to("admins").emit(eventName, {
-          orderId: order.orderId,
-          claimedBy: order.claimedBy,
-        });
+        io.to("admins").emit(eventName, { orderId: order.orderId, claimedBy: order.claimedBy });
       }
     }
   } catch (err) {
@@ -322,36 +333,36 @@ exports.updateOrderStatus = async (req, res) => {
   }
 };
 
-
-
-// �� Get all completed orders (for pilots)
+// �� Get orders for a pilot
 exports.getOrdersbypilot = async (req, res) => {
   try {
-    const orders = await Order.find({ claimedBy: req.pilot.id }) 
+    const orders = await Order.find({ claimedBy: req.pilot.id })
       .populate("buyer", "name email")
       .populate("products.productId", "name price")
       .populate("claimedBy", "name email phone")
       .sort({ createdAt: -1 });
-      res.json({ success: true, data: orders });
-      // ✅ Real-time push to pilots
-      try {
-        const io = req.app?.locals?.io;
-        if (io) {
-          io.to("pilots").emit("ordersUpdate", {
-            orders: orders.map((o) => ({
-              _id: o._id,
-              orderId: o.orderId,
-              total: o.total,
-              finalAmount: o.finalAmount,
-              itemsCount: o.products?.length || 0,
-              createdAt: o.createdAt,
-              status: o.status,
-            })),
-          });
-        }
-      } catch (emitErr) {
-        console.error("Socket emit failed:", emitErr);
+
+    res.json({ success: true, data: orders });
+
+    // ✅ Real-time push to pilots (optional)
+    try {
+      const io = req.app?.locals?.io;
+      if (io) {
+        io.to("pilots").emit("ordersUpdate", {
+          orders: orders.map((o) => ({
+            _id: o._id,
+            orderId: o.orderId,
+            total: o.total,
+            finalAmount: o.finalAmount,
+            itemsCount: o.products?.length || 0,
+            createdAt: o.createdAt,
+            status: o.status,
+          })),
+        });
       }
+    } catch (emitErr) {
+      console.error("Socket emit failed:", emitErr);
+    }
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

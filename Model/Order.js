@@ -1,3 +1,4 @@
+// Order.js
 const mongoose = require("mongoose");
 
 const orderSchema = new mongoose.Schema(
@@ -27,19 +28,18 @@ const orderSchema = new mongoose.Schema(
     location: { type: String, required: true },
     deliveryInstructions: { type: String },
 
-    // 🔹 Order status lifecycle
+    // 🔹 Order status lifecycle (machine-friendly values)
     status: {
       type: String,
       enum: [
         "pending",
         "claimed",
-        "Reached Pickup Point",
-        "Picked Up",
-        "Delivered",
+        "reached_pickup",
+        "picked_up",
+        "delivered",
         "cancelled",
       ],
       default: "pending",
-      lowercase: true,
     },
 
     // 🔹 Payment info
@@ -52,7 +52,6 @@ const orderSchema = new mongoose.Schema(
       type: String,
       enum: ["pending", "paid", "failed", "refunded"],
       default: "pending",
-      lowercase: true,
     },
     paymentDate: Date,
     paymentVerifiedAt: Date,
@@ -74,12 +73,14 @@ const orderSchema = new mongoose.Schema(
     ],
 
     // 🔹 Pricing breakdown
-    subtotal: { type: Number },
+    subtotal: { type: Number, default: 0 },
     discount: { type: Number, default: 0 },
     taxAmount: { type: Number, default: 0 },
     shippingFee: { type: Number, default: 0 },
-    total: { type: Number, required: true },
-    finalAmount: { type: Number, required: true },
+
+    // make total/finalAmount safe (defaults), so controller can compute them if missing
+    total: { type: Number, default: 0 },
+    finalAmount: { type: Number, default: 0 },
 
     // 🔹 GST / Business info
     gstNumber: String,
@@ -122,7 +123,7 @@ orderSchema.pre("save", function (next) {
   next();
 });
 
-// 🛠️ Static helpers (optional)
+// 🛠️ Static helpers
 orderSchema.statics.claimOrder = async function (orderIdOrId, pilotId, claimDurationMs = 2 * 60 * 1000) {
   const ObjectId = mongoose.Types.ObjectId;
   const now = new Date();
