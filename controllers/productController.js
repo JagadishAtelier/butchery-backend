@@ -50,6 +50,7 @@ exports.getProductById = async (req, res) => {
     }
 
     res.json({ success: true, data: product });
+    
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -80,7 +81,9 @@ exports.updateProduct = async (req, res) => {
       return res.status(404).json({ success: false, message: "Product not found" });
     }
 
+
     res.json({ success: true, data: updated });
+    console.log("Updated Product:", updated);
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
   }

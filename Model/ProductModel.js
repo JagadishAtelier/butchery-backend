@@ -18,14 +18,14 @@ const productSchema = new mongoose.Schema(
     shelfLife: { type: String }, // e.g., "2 days refrigerated", "6 months frozen"
     storageInstructions: { type: String }, // e.g., "Keep refrigerated at 0-4°C"
 
-    // ✅ Pricing & Weight (meat is often sold per kg/gm)
     unit: { type: String, enum: ["g", "kg", "piece"], default: "kg" },
     weightOptions: [
       {
-        weight: { type: Number, required: true }, // e.g., 500, 1000 (grams)
-        price: { type: Number, required: true }, // price for this weight
+        weight: { type: Number, required: true }, 
+        price: { type: Number, required: true }, 
         discountPrice : {type : Number},
-        stock: { type: Number, default: 0 }, // stock for this weight option
+        unit: { type: String, enum: ["g", "kg", "piece"], default: "kg" },
+        stock: { type: Number, default: 0 }, 
       },
     ],
 
