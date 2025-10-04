@@ -205,7 +205,7 @@ exports.deleteOrder = async (req, res) => {
 exports.getOrdersbynotclaime = async (req, res) => {
   try {
     const orders = await Order.find({ claimedBy: null })
-      .populate("buyer", "name email")
+      .populate("buyer")
       .populate("products.productId", "name price")
       .sort({ createdAt: -1 });
 
@@ -246,18 +246,23 @@ exports.claimOrder = async (req, res) => {
 
     const ObjectId = mongoose.Types.ObjectId;
     const now = new Date();
-    const claimDurationMs = 2 * 60 * 1000; // 2 minutes
+    const claimDurationMs = 2 * 60 * 1000;
     const claimExpiresAt = new Date(now.getTime() + claimDurationMs);
 
+    // Option 1 (recommended): let Mongoose cast the string -> ObjectId
     const claimed = await Order.findOneAndUpdate(
       {
-        _id: ObjectId(orderId),
-        $or: [{ claimedBy: null }, { claimExpiresAt: { $lte: new Date() } }, { claimExpiresAt: null }],
+        _id: orderId, // pass string, mongoose will cast
+        $or: [
+          { claimedBy: null },
+          { claimExpiresAt: { $lte: new Date() } },
+          { claimExpiresAt: null }
+        ],
         status: "pending",
       },
       {
         $set: {
-          claimedBy: ObjectId(pilotId),
+          claimedBy: pilotId, // pass string, mongoose will cast
           claimedAt: now,
           claimExpiresAt,
           status: "claimed",
@@ -265,12 +270,14 @@ exports.claimOrder = async (req, res) => {
       },
       { new: true }
     )
+
       .populate("buyer", "name email")
       .populate("products.productId", "name price");
 
     if (!claimed) {
       return res.status(400).json({ success: false, message: "Already claimed or unavailable" });
     }
+
 
     res.json({ success: true, data: claimed });
 

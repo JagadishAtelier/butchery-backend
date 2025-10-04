@@ -8,7 +8,7 @@ router.post("/", orderController.createOrder);
 router.get("/", orderController.getOrders);
 
 // these need authentication
-router.get("/unclaimed", protect, orderController.getOrdersbynotclaime);
+router.get("/unclaimed", protectPilot, orderController.getOrdersbynotclaime);
 router.get("/order/:userId", protect, orderController.getOrderbyuserId);
 
 // pilot-only actions: first authenticate as pilot, then restrict by role
