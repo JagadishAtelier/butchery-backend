@@ -4,10 +4,10 @@ const Product = require("../Model/ProductModel");
 // Add item to cart
 exports.addToCart = async (req, res) => {
   try {
-    const { productId, quantity = 1, price, weightOptionId } = req.body;
+    const { productId, quantity = 1, price, weightOptionId, unit } = req.body;
     const userId = req.user._id;
 
-    console.log("[addToCart] body:", { productId, quantity, price, weightOptionId, userId });
+    console.log("[addToCart] body:", { productId, quantity, price, weightOptionId, unit, userId });
 
     // fetch product
     const product = await Product.findById(productId).lean();
@@ -39,6 +39,9 @@ exports.addToCart = async (req, res) => {
     const chosenWeight = chosenOption?.weight ?? null;
     const chosenDiscount = chosenOption?.discountPrice ?? null;
 
+    // decide chosenUnit: prefer explicit request unit, otherwise fallback to weightOption.unit (if available)
+    const chosenUnit = unit ?? chosenOption?.unit ?? null;
+
     // find or create cart
     let cart = await Cart.findOne({ user: userId });
     const qtyToAdd = Number(quantity) || 1;
@@ -52,41 +55,46 @@ exports.addToCart = async (req, res) => {
           price: finalPrice,
           weightOption: chosenWeightOptionId,
           weight: chosenWeight,
+          unit: chosenUnit,
           discountPrice: chosenDiscount,
         }],
       });
     } else {
-      // Update existing item if product + weightOption matches
+      // Update existing item if product + weightOption + unit matches
       const itemIndex = cart.items.findIndex(item => {
         const itemProduct = item.product?.toString();
         const itemWeightOpt = item.weightOption ? item.weightOption.toString() : "";
+        const itemUnit = item.unit ?? "";
         const matchWeightOpt = String(itemWeightOpt || "") === String(chosenWeightOptionId || "");
-        return itemProduct === productId.toString() && matchWeightOpt;
+        const matchUnit = String(itemUnit) === String(chosenUnit || "");
+        return itemProduct === productId.toString() && matchWeightOpt && matchUnit;
       });
 
       if (itemIndex > -1) {
         cart.items[itemIndex].quantity = (cart.items[itemIndex].quantity || 0) + qtyToAdd;
-        // keep the stored price as-is (snapshot), or update it if you prefer:
+        // optionally update price snapshot:
         // cart.items[itemIndex].price = finalPrice;
       } else {
-        // push as a new line (different weightOption)
+        // push as a new line (different weightOption or unit)
         cart.items.push({
           product: productId,
           quantity: qtyToAdd,
           price: finalPrice,
           weightOption: chosenWeightOptionId,
           weight: chosenWeight,
+          unit: chosenUnit,          // <- persist unit
           discountPrice: chosenDiscount,
         });
       }
 
-      // DEDUPE existing duplicates for same product + weightOption (safety)
-      // Build map key = `${productId}_${weightOptionId||''}`
+      // DEDUPE existing duplicates for same product + weightOption + unit (safety)
+      // Build map key = `${productId}_${weightOptionId||''}_${unit||''}`
       const map = new Map();
       for (const it of cart.items) {
         const pid = it.product?.toString();
         const wopt = it.weightOption ? it.weightOption.toString() : "";
-        const key = `${pid}_${wopt}`;
+        const u = it.unit ?? "";
+        const key = `${pid}_${wopt}_${u}`;
         if (!map.has(key)) {
           map.set(key, {
             product: it.product,
@@ -94,8 +102,9 @@ exports.addToCart = async (req, res) => {
             price: it.price,
             weightOption: it.weightOption || null,
             weight: it.weight || null,
+            unit: it.unit || null,
             discountPrice: it.discountPrice || null,
-            _id: it._id, // will keep first id (mongoose will handle _id)
+            _id: it._id, // keep first id (mongoose will handle _id)
           });
         } else {
           // merge quantities (and keep first price/metadata)
@@ -116,6 +125,7 @@ exports.addToCart = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
+
 
   // Get user's cart
   exports.getCart = async (req, res) => {

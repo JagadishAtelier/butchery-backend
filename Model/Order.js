@@ -67,6 +67,7 @@ const orderSchema = new mongoose.Schema(
         productId: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
         name: String, // optional snapshot
         weight: Number,
+        unit: { type: String, enum: ["g", "kg", "piece"]},
         price: Number,
         quantity: { type: Number, default: 1 },
       },

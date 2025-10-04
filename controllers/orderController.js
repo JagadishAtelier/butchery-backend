@@ -28,6 +28,7 @@ exports.createOrder = async (req, res) => {
       gstNumber,
       companyName,
     } = req.body;
+    console.log("Creating order with data:", req.body);
 
     // ✅ Validate essential fields
     if (!buyer || !products?.length || !location) {

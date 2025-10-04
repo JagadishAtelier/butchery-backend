@@ -16,6 +16,7 @@ const cartItemSchema = new mongoose.Schema({
     type: Number,
     required: false,
   },
+  unit: { type: String, enum: ["g", "kg", "piece"]},
   discountPrice: {                                
     type: Number,
     required: false,
