@@ -144,20 +144,24 @@ exports.addToCart = async (req, res) => {
   exports.removeFromCart = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { productId } = req.params; // this is cart item _id
+    const { productId } = req.params; // cart item _id
 
-    const cart = await Cart.findOne({ user: userId });
-    if (!cart) return res.status(404).json({ message: "Cart not found" });
+    const result = await Cart.findOneAndUpdate(
+      { user: userId },
+      { $pull: { items: { _id: productId } } },
+      { new: true } // returns updated document
+    );
 
-    // Filter by cart item _id
-    cart.items = cart.items.filter(item => item._id.toString() !== productId);
-    await cart.save();
+    if (!result) {
+      return res.status(404).json({ success: false, message: "Cart or item not found" });
+    }
 
-    res.status(200).json({ success: true, data: cart });
+    res.status(200).json({ success: true, data: result });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
 
 
 
