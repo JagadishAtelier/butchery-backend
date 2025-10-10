@@ -50,7 +50,7 @@ async function getDashboard(req, res) {
 
       // Total revenue (only Paid orders)
       Order.aggregate([
-        { $match: { paymentStatus: 'Paid' } },
+        { $match: { paymentStatus: 'paid' } },
         { $group: { _id: null, total: { $sum: '$finalAmount' } } }
       ]),
 
