@@ -8,10 +8,10 @@ const initTransporter = () => {
     transporter = nodemailer.createTransport({
       host: process.env.EMAIL_HOST || 'smtp.gmail.com',
       port: process.env.EMAIL_PORT || 587,
-      secure: false, // true if using 465
+      secure: false, 
       auth: {
-        user: process.env.EMAIL_USER, // your gmail address
-        pass: process.env.EMAIL_PASS, // your app password (not Gmail login)
+        user: process.env.EMAIL_USER || 'iraichikadai@gmail.com', // your gmail address
+        pass: process.env.EMAIL_PASS || 'wrzo vvlb ylvb uwtb', // your app password (not Gmail login)
       },
     });
   }
